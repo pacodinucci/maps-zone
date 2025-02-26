@@ -1,113 +1,195 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect } from "react";
+import Map from "@/components/Map";
+import ZoneList from "@/components/ZoneList";
+import ZoneForm from "@/components/ZoneForm";
+import AddressChecker from "@/components/AddressChecker";
+import { useModal } from "@/providers/ModalProvider";
 
 export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
+  const [polygonPath, setPolygonPath] = useState<
+    { lat: number; lng: number }[]
+  >([]);
+  const [isPolygonClosed, setIsPolygonClosed] = useState(false);
+  const [zones, setZones] = useState<
+    { id: string; name: string; coordinates: { lat: number; lng: number }[] }[]
+  >([]);
+  const [zoneName, setZoneName] = useState("");
+  const [address, setAddress] = useState("");
+  const [isLoadingZones, setIsLoadingZones] = useState(false);
+  const [isCreatingZone, setIsCreatingZone] = useState(false);
 
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+  const { showModal } = useModal();
+
+  useEffect(() => {
+    const fetchZonesWithRetry = async (attempt = 1) => {
+      if (attempt > 5) {
+        console.error(
+          "❌ Error: No se pudo cargar las zonas después de 5 intentos."
+        );
+        setIsLoadingZones(false);
+        return;
+      }
+
+      setIsLoadingZones(true);
+
+      try {
+        const response = await fetch("/api/zones");
+        if (!response.ok) throw new Error("Error al obtener las zonas");
+
+        const data = await response.json();
+        setZones(
+          data.zones.map((zone: any) => ({
+            id: zone.id,
+            name: zone.name,
+            coordinates: JSON.parse(zone.coordinates),
+          }))
+        );
+
+        setIsLoadingZones(false);
+      } catch (error) {
+        console.warn(`⚠️ Intento ${attempt} fallido. Reintentando...`, error);
+
+        setTimeout(() => {
+          fetchZonesWithRetry(attempt + 1);
+        }, Math.pow(2, attempt) * 1000); // ⏳ Tiempo de espera: 2^intento * 1000ms
+      }
+    };
+
+    fetchZonesWithRetry();
+  }, []);
+
+  const handleMapClick = (e: google.maps.MapMouseEvent) => {
+    if (!isCreatingZone || !e.latLng) return;
+
+    const newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+
+    if (polygonPath.length >= 3) {
+      const firstPoint = polygonPath[0];
+      const distance = Math.sqrt(
+        Math.pow(newPoint.lat - firstPoint.lat, 2) +
+          Math.pow(newPoint.lng - firstPoint.lng, 2)
+      );
+
+      if (distance < 0.0025) {
+        setPolygonPath([...polygonPath, firstPoint]);
+        setIsPolygonClosed(true);
+        return;
+      }
+    }
+
+    setPolygonPath([...polygonPath, newPoint]);
+  };
+
+  const saveZoneToDB = async (name: string, coordinates: any) => {
+    try {
+      const response = await fetch("/api/zones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, coordinates }),
+      });
+
+      if (!response.ok) throw new Error("Error al guardar la zona");
+      return (await response.json()).zone;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  };
+
+  const saveZone = async () => {
+    if (!zoneName.trim() || polygonPath.length < 3) {
+      showModal("⚠️ Ingresa un nombre y selecciona al menos 3 puntos.");
+      return;
+    }
+    const newZone = await saveZoneToDB(zoneName, polygonPath);
+    if (newZone) {
+      setZones([
+        ...zones,
+        { id: newZone.id, name: zoneName, coordinates: polygonPath },
+      ]);
+      setPolygonPath([]);
+      setIsPolygonClosed(false);
+      setZoneName("");
+      setIsCreatingZone(false);
+    }
+  };
+
+  const deleteZone = async (id: string) => {
+    try {
+      await fetch(`/api/zones/${id}`, { method: "DELETE" });
+      setZones((prev) => prev.filter((zone) => zone.id !== id));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const geocodeAddress = () => {
+    if (!address.trim()) {
+      showModal("⚠️ Ingresa una dirección.");
+      return;
+    }
+
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ address }, (results, status) => {
+      if (status === "OK" && results[0]) {
+        const location = results[0].geometry.location;
+        const latLng = new google.maps.LatLng(location.lat(), location.lng());
+        let foundZone = null;
+
+        zones.forEach((zone) => {
+          const polygon = new google.maps.Polygon({ paths: zone.coordinates });
+          if (google.maps.geometry.poly.containsLocation(latLng, polygon)) {
+            foundZone = zone.name;
+          }
+        });
+
+        showModal(
+          foundZone
+            ? `✅ La dirección "${address}" está dentro de la zona: "${foundZone}".`
+            : `❌ La dirección "${address}" no está dentro de ninguna zona guardada.`
+        );
+      } else {
+        showModal("⚠️ No se pudo encontrar la dirección.");
+      }
+    });
+  };
+
+  return (
+    <div className="flex w-full h-screen py-4">
+      <div className="flex flex-col gap-2 p-4">
+        <AddressChecker
+          address={address}
+          setAddress={setAddress}
+          geocodeAddress={geocodeAddress}
+        />
+        <ZoneList
+          zones={zones}
+          isLoadingZones={isLoadingZones}
+          deleteZone={deleteZone}
+        />
+        <ZoneForm
+          zoneName={zoneName}
+          setZoneName={setZoneName}
+          saveZone={saveZone}
+          isCreatingZone={isCreatingZone}
+          toggleCreatingMode={() => {
+            setIsCreatingZone(!isCreatingZone);
+            if (!isCreatingZone) {
+              setPolygonPath([]);
+              setIsPolygonClosed(false);
+            }
+          }}
         />
       </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+      <Map
+        polygonPath={polygonPath}
+        setPolygonPath={setPolygonPath}
+        isPolygonClosed={isPolygonClosed}
+        zones={zones}
+        handleMapClick={handleMapClick}
+      />
+    </div>
   );
 }
