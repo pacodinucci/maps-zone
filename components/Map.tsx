@@ -14,12 +14,28 @@ const containerStyle = {
 
 const center = { lat: -34.55, lng: -58.45 };
 
+interface Zone {
+  id: string;
+  name: string;
+  coordinates: { lat: number; lng: number }[];
+}
+
+interface MapProps {
+  polygonPath: { lat: number; lng: number }[];
+  setPolygonPath: React.Dispatch<
+    React.SetStateAction<{ lat: number; lng: number }[]>
+  >;
+  handleMapClick: (e: google.maps.MapMouseEvent) => void;
+  isPolygonClosed: boolean;
+  zones: Zone[];
+}
+
 export default function Map({
   polygonPath,
   handleMapClick,
   isPolygonClosed,
   zones,
-}: any) {
+}: MapProps) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
     libraries: ["geometry", "places"],
@@ -39,7 +55,7 @@ export default function Map({
       zoom={15}
       onClick={handleMapClick}
     >
-      {polygonPath.map((point: any, index: number) => (
+      {polygonPath.map((point, index) => (
         <Marker key={index} position={point} label={(index + 1).toString()} />
       ))}
 
@@ -57,7 +73,7 @@ export default function Map({
         />
       )}
 
-      {zones.map((zone: any) => (
+      {zones.map((zone) => (
         <Polygon
           key={zone.id}
           paths={zone.coordinates}

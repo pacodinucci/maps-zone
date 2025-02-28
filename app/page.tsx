@@ -7,6 +7,12 @@ import ZoneForm from "@/components/ZoneForm";
 import AddressChecker from "@/components/AddressChecker";
 import { useModal } from "@/providers/ModalProvider";
 
+interface Zone {
+  id: string;
+  name: string;
+  coordinates: { lat: number; lng: number }[];
+}
+
 export default function Home() {
   const [polygonPath, setPolygonPath] = useState<
     { lat: number; lng: number }[]
@@ -40,10 +46,16 @@ export default function Home() {
 
         const data = await response.json();
         setZones(
-          data.zones.map((zone: any) => ({
+          data.zones.map((zone: Zone) => ({
             id: zone.id,
             name: zone.name,
-            coordinates: JSON.parse(zone.coordinates),
+            coordinates:
+              typeof zone.coordinates === "string"
+                ? (JSON.parse(zone.coordinates) as {
+                    lat: number;
+                    lng: number;
+                  }[])
+                : zone.coordinates,
           }))
         );
 
@@ -82,7 +94,10 @@ export default function Home() {
     setPolygonPath([...polygonPath, newPoint]);
   };
 
-  const saveZoneToDB = async (name: string, coordinates: any) => {
+  const saveZoneToDB = async (
+    name: string,
+    coordinates: { lat: number; lng: number }[]
+  ) => {
     try {
       const response = await fetch("/api/zones", {
         method: "POST",
@@ -133,7 +148,7 @@ export default function Home() {
 
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ address }, (results, status) => {
-      if (status === "OK" && results[0]) {
+      if (status === "OK" && results && results[0]) {
         const location = results[0].geometry.location;
         const latLng = new google.maps.LatLng(location.lat(), location.lng());
         let foundZone = null;
