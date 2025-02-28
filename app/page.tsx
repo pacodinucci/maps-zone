@@ -133,7 +133,7 @@ export default function Home() {
 
   const deleteZone = async (id: string) => {
     try {
-      await fetch(`/api/zones/${id}`, { method: "DELETE" });
+      await fetch(`/api/zones?zoneId=${id}`, { method: "DELETE" });
       setZones((prev) => prev.filter((zone) => zone.id !== id));
     } catch (error) {
       console.error(error);

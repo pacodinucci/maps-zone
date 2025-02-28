@@ -61,3 +61,29 @@ export async function GET() {
     );
   }
 }
+
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const zoneId = searchParams.get("zoneId");
+
+  if (!zoneId) {
+    return new NextResponse("Zone Id is required", { status: 400 });
+  }
+
+  try {
+    const zoneDeleted = await db.zone.delete({
+      where: {
+        id: zoneId,
+      },
+    });
+
+    if (!zoneDeleted) {
+      return new NextResponse("Zone couldn't be deleted", { status: 400 });
+    }
+
+    return new NextResponse("Zone deleted", { status: 200 });
+  } catch (error) {
+    console.error("Error deleting zone", error);
+    return new NextResponse("Internal server error", { status: 500 });
+  }
+}
