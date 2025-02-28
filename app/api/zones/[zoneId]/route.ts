@@ -2,18 +2,18 @@ import { NextResponse } from "next/server";
 import db from "@/lib/db";
 
 export async function DELETE(
-  // req: Request,
-  context: { params: { zoneId: string } }
+  req: Request,
+  { params }: { params: { zoneId: string } }
 ) {
   try {
-    if (!context.params.zoneId) {
+    const { zoneId } = params;
+
+    if (zoneId) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    const id = await context.params.zoneId;
-
     // Buscar si la zona existe
-    const zone = await db.zone.findUnique({ where: { id } });
+    const zone = await db.zone.findUnique({ where: { id: zoneId } });
     if (!zone) {
       return NextResponse.json(
         { error: "Zona no encontrada." },
@@ -22,7 +22,7 @@ export async function DELETE(
     }
 
     // Eliminar la zona
-    await db.zone.delete({ where: { id } });
+    await db.zone.delete({ where: { id: zoneId } });
 
     return NextResponse.json(
       { message: "Zona eliminada correctamente." },
