@@ -2,15 +2,15 @@ import { NextResponse } from "next/server";
 import db from "@/lib/db";
 
 export async function DELETE(
-  req: Request,
-  { params }: { params: { zoneId: string } }
+  // req: Request,
+  context: { params: { zoneId: string } }
 ) {
   try {
-    if (!params.zoneId) {
+    if (!context.params.zoneId) {
       return new NextResponse("ID is required", { status: 400 });
     }
 
-    const id = await params.zoneId;
+    const id = await context.params.zoneId;
 
     // Buscar si la zona existe
     const zone = await db.zone.findUnique({ where: { id } });
