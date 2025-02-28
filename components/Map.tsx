@@ -1,16 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   GoogleMap,
   Polygon,
   useJsApiLoader,
   Marker,
 } from "@react-google-maps/api";
-
-const containerStyle = {
-  width: "80%",
-  height: "90vh",
-};
 
 const center = { lat: -34.55, lng: -58.45 };
 
@@ -40,6 +36,23 @@ export default function Map({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
     libraries: ["geometry", "places"],
   });
+
+  const [containerStyle, setContainerStyle] = useState({
+    width: window.innerWidth < 768 ? "100%" : "80%", // Detectar el ancho inicial
+    height: "90vh",
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setContainerStyle({
+        width: window.innerWidth < 768 ? "100%" : "80%",
+        height: "90vh",
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize); // Limpiar evento al desmontar
+  }, []);
 
   if (!isLoaded)
     return (
