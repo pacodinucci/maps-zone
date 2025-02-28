@@ -1,4 +1,4 @@
-"use client";
+"use client"; // ✅ Asegura que el componente solo se renderiza en el cliente
 
 import { useState, useEffect } from "react";
 import {
@@ -38,11 +38,13 @@ export default function Map({
   });
 
   const [containerStyle, setContainerStyle] = useState({
-    width: window.innerWidth < 768 ? "100%" : "80%", // Detectar el ancho inicial
+    width: "80%", // ✅ Valor por defecto seguro para SSR
     height: "90vh",
   });
 
   useEffect(() => {
+    if (typeof window === "undefined") return; // ✅ Evita acceso a `window` en el servidor
+
     const handleResize = () => {
       setContainerStyle({
         width: window.innerWidth < 768 ? "100%" : "80%",
@@ -50,8 +52,9 @@ export default function Map({
       });
     };
 
+    handleResize(); // ✅ Llamamos la función una vez para establecer el tamaño inicial
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize); // Limpiar evento al desmontar
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   if (!isLoaded)
